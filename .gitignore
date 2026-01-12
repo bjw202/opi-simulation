@@ -1,0 +1,13 @@
+# Claude settings
+.claude/
+CLAUDE.md
+
+# Documentation (private)
+opi-explanation.md
+tax.md
+
+# Test files
+test_*.py
+
+# System files
+.DS_Store
