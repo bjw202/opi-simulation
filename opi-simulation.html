@@ -212,12 +212,6 @@
                 <h2 class="text-xl font-bold mb-6">세금 영향 분석</h2>
                 <div id="tax-comparison"></div>
             </div>
-
-            <!-- 손익분기점 -->
-            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 sm:p-8 border-l-4 border-indigo-500">
-                <h2 class="text-xl font-bold mb-6">손익분기점 분석</h2>
-                <div id="breakeven-analysis"></div>
-            </div>
         </section>
 
         <!-- Footer -->
@@ -429,7 +423,6 @@
                 comparisonTable: document.getElementById('comparison-table')?.querySelector('tbody'),
                 priceScenarioTable: document.getElementById('price-scenario-table')?.querySelector('tbody'),
                 taxComparison: document.getElementById('tax-comparison'),
-                breakevenAnalysis: document.getElementById('breakeven-analysis'),
                 darkModeToggle: document.getElementById('dark-mode-toggle'),
                 loading: document.getElementById('loading')
             };
@@ -469,7 +462,7 @@
             setTimeout(() => {
                 const result = calculateAllScenarios(params);
                 const priceScenarios = analyzePriceScenarios(params);
-                const taxComparison = compareTaxImpact({ ...params, stockRatio: result.optimalRatio });
+                const taxComparison = compareTaxImpact({ ...params, stockRatio: 50 });  // 항상 50% 기준
                 this.currentResult = { params, result, priceScenarios, taxComparison };
 
                 // 50% 선택 시 현금 대비 차이
@@ -484,8 +477,7 @@
 
                 this.updateComparisonTable(result.scenarios, result.optimalRatio);
                 this.updatePriceScenarioTable(priceScenarios);
-                this.updateTaxComparison(taxComparison, result.optimalRatio);
-                this.updateBreakevenAnalysis(taxComparison, params);
+                this.updateTaxComparison(taxComparison);
 
                 ChartManager.updateRatioChart(result.scenarios);
                 ChartManager.updatePriceScenarioChart(priceScenarios);
@@ -531,7 +523,7 @@
             });
         },
 
-        updateTaxComparison(c, optimalRatio) {
+        updateTaxComparison(c) {
             this.elements.taxComparison.innerHTML = `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
@@ -544,7 +536,7 @@
                         </div>
                     </div>
                     <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-5 border border-green-200 dark:border-green-800">
-                        <h4 class="font-bold text-lg mb-4 text-green-700 dark:text-green-400">주식 ${optimalRatio}% 선택</h4>
+                        <h4 class="font-bold text-lg mb-4 text-green-700 dark:text-green-400">주식 50% 선택</h4>
                         <div class="space-y-2">
                             <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">지급 주식수</span><span class="font-semibold">${c.withStock.stockCount.toLocaleString()}주</span></div>
                             <div class="flex justify-between text-green-600 dark:text-green-400"><span>15% 추가혜택</span><span>+${formatCurrencyShort(c.withStock.additionalBenefit)}</span></div>
@@ -559,25 +551,6 @@
                     <div class="text-center">
                         <span class="text-gray-600 dark:text-gray-400">주식 선택 시 예상 차이</span>
                         <div class="text-2xl font-bold ${c.difference >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${c.difference >= 0 ? '+' : ''}${formatCurrency(c.difference)}</div>
-                    </div>
-                </div>`;
-        },
-
-        updateBreakevenAnalysis(c, params) {
-            this.elements.breakevenAnalysis.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <h4 class="font-semibold text-gray-700 dark:text-gray-300 mb-3">손익분기 분석</h4>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">기준주가</span><span class="font-medium">${formatCurrency(params.baseStockPrice)}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">손익분기 주가</span><span class="font-medium text-indigo-600 dark:text-indigo-400">${formatCurrency(c.breakEvenPrice)}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">허용 하락폭</span><span class="font-medium text-green-600 dark:text-green-400">${c.breakEvenChange.toFixed(1)}%</span></div>
-                        </div>
-                        <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">15% 추가혜택으로 주가가 약 <strong>${Math.abs(c.breakEvenChange).toFixed(1)}%</strong> 하락해도 현금 수령과 동일</p>
-                    </div>
-                    <div class="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl p-5">
-                        <h4 class="font-semibold text-indigo-700 dark:text-indigo-400 mb-3">추천 전략</h4>
-                        ${c.recommendation === 'stock' ? `<div class="flex items-start gap-3"><span class="text-2xl">📈</span><div><p class="font-medium">주식 선택 추천</p><p class="text-sm text-gray-600 dark:text-gray-400 mt-1">예상 주가(${formatCurrencyShort(params.futureStockPrice)})가 손익분기점(${formatCurrencyShort(c.breakEvenPrice)})보다 높습니다.</p></div></div>` : `<div class="flex items-start gap-3"><span class="text-2xl">💵</span><div><p class="font-medium">현금 수령 고려</p><p class="text-sm text-gray-600 dark:text-gray-400 mt-1">예상 주가가 손익분기점보다 낮습니다.</p></div></div>`}
                     </div>
                 </div>`;
         },
