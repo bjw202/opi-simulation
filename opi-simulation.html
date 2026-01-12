@@ -136,9 +136,9 @@
             <!-- Summary Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                 <div class="bg-gradient-to-br from-samsung-blue to-samsung-light text-white rounded-2xl p-6 shadow-lg">
-                    <h3 class="text-sm font-medium opacity-80 mb-1">최적 추천 비율</h3>
-                    <div id="optimal-ratio" class="text-4xl font-bold">-</div>
-                    <p class="text-xs opacity-70 mt-2">총 수령액 기준</p>
+                    <h3 class="text-sm font-medium opacity-80 mb-1">50% 선택 시 차이</h3>
+                    <div id="stock-difference" class="text-4xl font-bold">-</div>
+                    <p class="text-xs opacity-70 mt-2">현금 대비</p>
                 </div>
                 <div class="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
                     <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">OPI 지급액 (세전)</h3>
@@ -423,7 +423,7 @@
                 basePrice: document.getElementById('base-price'),
                 futurePrice: document.getElementById('future-price'),
                 results: document.getElementById('results'),
-                optimalRatio: document.getElementById('optimal-ratio'),
+                stockDifference: document.getElementById('stock-difference'),
                 opiAmount: document.getElementById('opi-amount'),
                 maxTotal: document.getElementById('max-total'),
                 comparisonTable: document.getElementById('comparison-table')?.querySelector('tbody'),
@@ -472,7 +472,13 @@
                 const taxComparison = compareTaxImpact({ ...params, stockRatio: result.optimalRatio });
                 this.currentResult = { params, result, priceScenarios, taxComparison };
 
-                this.elements.optimalRatio.textContent = result.optimalRatio + '%';
+                // 50% 선택 시 현금 대비 차이
+                const scenario50 = result.scenarios.find(s => s.stockRatio === 50);
+                const diff = scenario50.vsAllCash;
+                const diffText = (diff >= 0 ? '+' : '') + formatCurrencyShort(diff);
+                this.elements.stockDifference.textContent = diffText;
+                this.elements.stockDifference.className = `text-4xl font-bold ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
                 this.elements.opiAmount.textContent = formatCurrencyShort(result.optimalScenario.opiAmount);
                 this.elements.maxTotal.textContent = formatCurrencyShort(result.optimalScenario.totalReceived);
 

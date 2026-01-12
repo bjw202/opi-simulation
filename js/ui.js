@@ -35,7 +35,7 @@ const UI = {
             results: document.getElementById('results'),
 
             // 요약 카드
-            optimalRatio: document.getElementById('optimal-ratio'),
+            stockDifference: document.getElementById('stock-difference'),
             opiAmount: document.getElementById('opi-amount'),
             maxTotal: document.getElementById('max-total'),
 
@@ -216,8 +216,14 @@ const UI = {
      * 요약 카드 업데이트
      */
     updateSummary(result, params) {
-        if (this.elements.optimalRatio) {
-            this.elements.optimalRatio.textContent = `${result.optimalRatio}%`;
+        // 50% 선택 시 현금 대비 차이
+        if (this.elements.stockDifference) {
+            const scenario50 = result.scenarios.find(s => s.stockRatio === 50);
+            const diff = scenario50.vsAllCash;
+            const diffText = (diff >= 0 ? '+' : '') + Calculator.formatCurrencyShort(diff);
+            this.elements.stockDifference.textContent = diffText;
+            // 양수는 녹색, 음수는 빨간색
+            this.elements.stockDifference.className = `text-4xl font-bold ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`;
         }
         if (this.elements.opiAmount) {
             this.elements.opiAmount.textContent = Calculator.formatCurrencyShort(result.optimalScenario.opiAmount);
