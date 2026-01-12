@@ -158,12 +158,12 @@
                         <thead>
                             <tr class="text-xs uppercase text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50">
                                 <th class="px-4 py-3 text-left font-semibold">비율</th>
-                                <th class="px-4 py-3 text-right font-semibold">주식보상액</th>
+                                <th class="px-4 py-3 text-right font-semibold">주식수</th>
                                 <th class="px-4 py-3 text-right font-semibold">추가혜택(15%)</th>
-                                <th class="px-4 py-3 text-right font-semibold">지급주식수</th>
-                                <th class="px-4 py-3 text-right font-semibold">현금수령(세후)</th>
-                                <th class="px-4 py-3 text-right font-semibold">1년후 주식가치</th>
-                                <th class="px-4 py-3 text-right font-semibold">총 수령액</th>
+                                <th class="px-4 py-3 text-right font-semibold">주식가치(1년후)</th>
+                                <th class="px-4 py-3 text-right font-semibold">과세소득</th>
+                                <th class="px-4 py-3 text-right font-semibold">세금</th>
+                                <th class="px-4 py-3 text-right font-semibold">세후 실수령</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
@@ -287,13 +287,22 @@
         const totalStockReward = stockRewardAmount + additionalBenefit;
         const stockCount = Math.floor(totalStockReward / baseStockPrice);
         const remainder = totalStockReward - (stockCount * baseStockPrice);
-        const currentStockValue = stockCount * baseStockPrice;
         const futureStockValue = stockCount * futureStockPrice;
-        const cashTaxDetails = calculateNetPay(cashAmountGross);
-        const netCashAmount = cashTaxDetails.netPay;
-        const totalReceived = netCashAmount + futureStockValue + remainder;
-        const benefitGain = additionalBenefit * (futureStockPrice / baseStockPrice);
-        return { stockRatio, opiAmount, stockRewardAmount, additionalBenefit, totalStockReward, stockCount, remainder, currentStockValue, futureStockValue, cashAmountGross, cashTaxDetails, netCashAmount, totalReceived, benefitGain };
+        // 세금 계산 (연봉 + OPI + 추가혜택 합산, 평가차액은 과세 대상 아님)
+        const salaryOnlyTax = calculateNetPay(annualSalary);
+        const opiTaxableIncome = opiAmount + additionalBenefit;
+        const totalIncome = annualSalary + opiTaxableIncome;
+        const totalTax = calculateNetPay(totalIncome);
+        const opiTaxAmount = totalTax.totalDeductions - salaryOnlyTax.totalDeductions;
+        // 실수령액 = 총수령(세전) - 세금
+        const grossTotal = cashAmountGross + futureStockValue + remainder;
+        const totalReceived = grossTotal - opiTaxAmount;
+        // 100% 현금 수령 대비
+        const allCashTotalTax = calculateNetPay(annualSalary + opiAmount);
+        const allCashOpiTax = allCashTotalTax.totalDeductions - salaryOnlyTax.totalDeductions;
+        const allCashNet = opiAmount - allCashOpiTax;
+        const vsAllCash = totalReceived - allCashNet;
+        return { stockRatio, opiAmount, stockRewardAmount, additionalBenefit, totalStockReward, stockCount, remainder, futureStockValue, cashAmountGross, opiTaxableIncome, opiTaxAmount, grossTotal, totalReceived, allCashNet, vsAllCash };
     }
 
     function calculateAllScenarios(baseParams) {
@@ -313,10 +322,14 @@
     function compareTaxImpact(params) {
         const { annualSalary, opiRate, baseStockPrice, futureStockPrice, stockRatio } = params;
         const opiAmount = annualSalary * (opiRate / 100);
-        const allCashDetails = calculateNetPay(opiAmount);
-        const allCash = { grossAmount: opiAmount, insurance: allCashDetails.insurance, tax: allCashDetails.tax, netAmount: allCashDetails.netPay, futureValue: allCashDetails.netPay };
+        // 100% 현금 수령 (연봉 합산 기준 한계세율 적용)
+        const salaryOnlyTax = calculateNetPay(annualSalary);
+        const salaryPlusOpiTax = calculateNetPay(annualSalary + opiAmount);
+        const opiMarginalTax = salaryPlusOpiTax.totalDeductions - salaryOnlyTax.totalDeductions;
+        const allCashNetAmount = opiAmount - opiMarginalTax;
+        const allCash = { grossAmount: opiAmount, taxableIncome: opiAmount, tax: opiMarginalTax, netAmount: allCashNetAmount, futureValue: allCashNetAmount };
         const stockResult = calculateOPIReward(params);
-        const withStock = { grossAmount: opiAmount, cashPortion: stockResult.netCashAmount, stockPortion: stockResult.futureStockValue, remainder: stockResult.remainder, additionalBenefitValue: stockResult.benefitGain, totalFutureValue: stockResult.totalReceived, stockCount: stockResult.stockCount };
+        const withStock = { grossAmount: opiAmount, additionalBenefit: stockResult.additionalBenefit, taxableIncome: stockResult.opiTaxableIncome, tax: stockResult.opiTaxAmount, stockCount: stockResult.stockCount, futureStockValue: stockResult.futureStockValue, totalFutureValue: stockResult.totalReceived };
         const breakEvenPrice = baseStockPrice * (1 - CONFIG.ADDITIONAL_BENEFIT_RATE / (1 + CONFIG.ADDITIONAL_BENEFIT_RATE));
         const breakEvenChange = ((breakEvenPrice / baseStockPrice) - 1) * 100;
         return { allCash, withStock, difference: withStock.totalFutureValue - allCash.futureValue, breakEvenPrice, breakEvenChange, recommendation: withStock.totalFutureValue >= allCash.futureValue ? 'stock' : 'cash' };
@@ -362,9 +375,10 @@
                 data: {
                     labels: scenarios.map(s => s.stockRatio + '%'),
                     datasets: [
-                        { label: '현금 (세후)', data: scenarios.map(s => s.netCashAmount), backgroundColor: this.colors.cash, borderRadius: 4 },
+                        { label: '현금 (세전)', data: scenarios.map(s => s.cashAmountGross), backgroundColor: this.colors.cash, borderRadius: 4 },
                         { label: '주식 가치', data: scenarios.map(s => s.futureStockValue), backgroundColor: this.colors.stock, borderRadius: 4 },
-                        { label: '차액', data: scenarios.map(s => s.remainder), backgroundColor: this.colors.remainder, borderRadius: 4 }
+                        { label: '차액', data: scenarios.map(s => s.remainder), backgroundColor: this.colors.remainder, borderRadius: 4 },
+                        { label: '세금', data: scenarios.map(s => -s.opiTaxAmount), backgroundColor: 'rgba(239, 68, 68, 0.7)', borderRadius: 4 }
                     ]
                 },
                 options: { ...this.getCommonOptions(), scales: { ...this.getCommonOptions().scales, x: { ...this.getCommonOptions().scales.x, stacked: true }, y: { ...this.getCommonOptions().scales.y, stacked: true } } }
@@ -485,11 +499,11 @@
                 row.className = isOptimal ? 'bg-indigo-50 dark:bg-indigo-900/30 font-semibold' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50';
                 row.innerHTML = `
                     <td class="px-4 py-3">${isOptimal ? '<span class="text-indigo-600 dark:text-indigo-400 mr-1">★</span>' : ''}${s.stockRatio}%</td>
-                    <td class="px-4 py-3 text-right">${formatCurrencyShort(s.stockRewardAmount)}</td>
-                    <td class="px-4 py-3 text-right text-green-600 dark:text-green-400">+${formatCurrencyShort(s.additionalBenefit)}</td>
                     <td class="px-4 py-3 text-right">${s.stockCount.toLocaleString()}주</td>
-                    <td class="px-4 py-3 text-right">${formatCurrencyShort(s.netCashAmount)}</td>
+                    <td class="px-4 py-3 text-right text-green-600 dark:text-green-400">+${formatCurrencyShort(s.additionalBenefit)}</td>
                     <td class="px-4 py-3 text-right">${formatCurrencyShort(s.futureStockValue)}</td>
+                    <td class="px-4 py-3 text-right">${formatCurrencyShort(s.opiTaxableIncome)}</td>
+                    <td class="px-4 py-3 text-right text-red-500">-${formatCurrencyShort(s.opiTaxAmount)}</td>
                     <td class="px-4 py-3 text-right font-bold ${isOptimal ? 'text-indigo-600 dark:text-indigo-400' : ''}">${formatCurrencyShort(s.totalReceived)}</td>`;
                 tbody.appendChild(row);
             });
@@ -517,20 +531,21 @@
                     <div class="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
                         <h4 class="font-bold text-lg mb-4 text-amber-700 dark:text-amber-400">100% 현금 수령</h4>
                         <div class="space-y-2">
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">세전 금액</span><span class="font-semibold">${formatCurrency(c.allCash.grossAmount)}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">4대보험</span><span class="text-red-500">-${formatCurrencyShort(c.allCash.insurance.total)}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">소득세+지방세</span><span class="text-red-500">-${formatCurrencyShort(c.allCash.tax.total)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">OPI 세전 금액</span><span class="font-semibold">${formatCurrency(c.allCash.grossAmount)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">과세 소득</span><span>${formatCurrency(c.allCash.taxableIncome)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">세금 (4대보험+소득세)</span><span class="text-red-500">-${formatCurrency(c.allCash.tax)}</span></div>
                             <div class="border-t border-amber-300 dark:border-amber-700 pt-2 flex justify-between"><span class="font-bold">세후 수령액</span><span class="font-bold text-xl text-amber-700 dark:text-amber-400">${formatCurrency(c.allCash.netAmount)}</span></div>
                         </div>
                     </div>
                     <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-5 border border-green-200 dark:border-green-800">
                         <h4 class="font-bold text-lg mb-4 text-green-700 dark:text-green-400">주식 ${optimalRatio}% 선택</h4>
                         <div class="space-y-2">
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">현금 부분 (세후)</span><span class="font-semibold">${formatCurrency(c.withStock.cashPortion)}</span></div>
-                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">주식 가치 (1년 후)</span><span class="font-semibold">${formatCurrency(c.withStock.stockPortion)}</span></div>
                             <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">지급 주식수</span><span class="font-semibold">${c.withStock.stockCount.toLocaleString()}주</span></div>
-                            <div class="flex justify-between text-green-600 dark:text-green-400"><span>추가혜택 가치</span><span>+${formatCurrencyShort(c.withStock.additionalBenefitValue)}</span></div>
-                            <div class="border-t border-green-300 dark:border-green-700 pt-2 flex justify-between"><span class="font-bold">예상 총 가치</span><span class="font-bold text-xl text-green-700 dark:text-green-400">${formatCurrency(c.withStock.totalFutureValue)}</span></div>
+                            <div class="flex justify-between text-green-600 dark:text-green-400"><span>15% 추가혜택</span><span>+${formatCurrencyShort(c.withStock.additionalBenefit)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">주식 가치 (1년 후)</span><span>${formatCurrency(c.withStock.futureStockValue)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">과세 소득</span><span>${formatCurrency(c.withStock.taxableIncome)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">세금 (4대보험+소득세)</span><span class="text-red-500">-${formatCurrency(c.withStock.tax)}</span></div>
+                            <div class="border-t border-green-300 dark:border-green-700 pt-2 flex justify-between"><span class="font-bold">세후 실수령액</span><span class="font-bold text-xl text-green-700 dark:text-green-400">${formatCurrency(c.withStock.totalFutureValue)}</span></div>
                         </div>
                     </div>
                 </div>

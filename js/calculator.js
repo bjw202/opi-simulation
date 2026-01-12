@@ -122,7 +122,7 @@ function calculateOPIReward(params) {
     // 1. OPI 지급액 (세전)
     const opiAmount = annualSalary * (opiRate / 100);
 
-    // 2. 주식보상액
+    // 2. 주식보상 신청금액
     const stockRewardAmount = opiAmount * (stockRatio / 100);
 
     // 3. 현금 지급액 (세전)
@@ -131,40 +131,48 @@ function calculateOPIReward(params) {
     // 4. 추가혜택 (15%)
     const additionalBenefit = stockRewardAmount * CONFIG.ADDITIONAL_BENEFIT_RATE;
 
-    // 5. 총 주식보상 (주식보상액 + 추가혜택)
+    // 5. 총 주식보상 (주식보상 신청금액 + 15% 추가혜택)
     const totalStockReward = stockRewardAmount + additionalBenefit;
 
-    // 6. 지급 주식수 (소수점 버림)
+    // 6. 지급 주식수 = 총 주식보상 / 기준주가 (소수점 버림)
     const stockCount = Math.floor(totalStockReward / baseStockPrice);
 
     // 7. 차액 (현금 지급)
     const remainder = totalStockReward - (stockCount * baseStockPrice);
 
-    // 8. 현재 주식 가치 (기준주가 기준)
-    const currentStockValue = stockCount * baseStockPrice;
-
-    // 9. 1년 후 주식 가치 (미래주가 기준)
+    // 8. 1년 후 주식 가치 (미래주가 기준)
     const futureStockValue = stockCount * futureStockPrice;
 
-    // 10. 주식 수익/손실
-    const stockGainLoss = futureStockValue - currentStockValue;
-    const stockGainLossRate = currentStockValue > 0
-        ? ((futureStockValue - currentStockValue) / currentStockValue) * 100
-        : 0;
+    // ========== 세금 계산 ==========
+    // 과세소득 = OPI + 15% 추가혜택 (평가차액은 과세 대상 아님)
+    // 연봉과 합산하여 한계세율 적용
 
-    // 11. 세금 계산 (현금 부분에 대해서만)
-    const cashTaxDetails = calculateNetPay(cashAmountGross);
-    const netCashAmount = cashTaxDetails.netPay;
+    // 연봉만 있을 때의 세금
+    const salaryOnlyTax = calculateNetPay(annualSalary);
 
-    // 12. 총 수령액 (1년 후 기준)
-    // = 현금 실수령 + 주식 미래가치 + 차액
-    const totalReceived = netCashAmount + futureStockValue + remainder;
+    // OPI 관련 과세소득 = OPI + 15% 추가혜택
+    const opiTaxableIncome = opiAmount + additionalBenefit;
 
-    // 13. 추가혜택으로 인한 이득 (미래주가 기준)
-    const benefitGain = additionalBenefit * (futureStockPrice / baseStockPrice);
+    // 연봉 + OPI 관련 소득 합산 시 세금
+    const totalIncome = annualSalary + opiTaxableIncome;
+    const totalTax = calculateNetPay(totalIncome);
 
-    // 14. 100% 현금 수령 대비 차이
-    const allCashNet = calculateNetPay(opiAmount).netPay;
+    // OPI에 대한 추가 세금 (한계세금)
+    const opiTaxAmount = totalTax.totalDeductions - salaryOnlyTax.totalDeductions;
+
+    // ========== 실수령액 계산 ==========
+
+    // 총 수령액 (세전) = 현금 + 주식 미래가치 + 차액
+    const grossTotal = cashAmountGross + futureStockValue + remainder;
+
+    // 실수령액 = 총 수령액 - OPI 관련 세금
+    const totalReceived = grossTotal - opiTaxAmount;
+
+    // ========== 100% 현금 수령 대비 ==========
+
+    const allCashTotalTax = calculateNetPay(annualSalary + opiAmount);
+    const allCashOpiTax = allCashTotalTax.totalDeductions - salaryOnlyTax.totalDeductions;
+    const allCashNet = opiAmount - allCashOpiTax;
     const vsAllCash = totalReceived - allCashNet;
 
     return {
@@ -181,22 +189,21 @@ function calculateOPIReward(params) {
         totalStockReward,
         stockCount,
         remainder,
-        currentStockValue,
         futureStockValue,
-        stockGainLoss,
-        stockGainLossRate,
 
         // 현금 관련
         cashAmountGross,
-        cashTaxDetails,
-        netCashAmount,
+
+        // 세금 정보
+        opiTaxableIncome,    // OPI 관련 과세소득 (OPI + 15% 추가혜택)
+        opiTaxAmount,        // OPI 관련 세금
+        salaryOnlyTax,
+        totalTax,
 
         // 총합
-        totalReceived,
-        benefitGain,
+        grossTotal,          // 세전 총수령
+        totalReceived,       // 세후 실수령
         vsAllCash,
-
-        // 참고: 100% 현금 수령 시
         allCashNet
     };
 }
@@ -257,30 +264,33 @@ function compareTaxImpact(params) {
     const { annualSalary, opiRate, baseStockPrice, futureStockPrice, stockRatio } = params;
     const opiAmount = annualSalary * (opiRate / 100);
 
-    // Case 1: 100% 현금 수령
-    const allCashDetails = calculateNetPay(opiAmount);
+    // Case 1: 100% 현금 수령 (연봉 합산 기준 한계세율 적용)
+    const salaryOnlyTax = calculateNetPay(annualSalary);
+    const salaryPlusOpiTax = calculateNetPay(annualSalary + opiAmount);
+    const opiMarginalTax = salaryPlusOpiTax.totalDeductions - salaryOnlyTax.totalDeductions;
+    const allCashNetAmount = opiAmount - opiMarginalTax;
+
     const allCash = {
         grossAmount: opiAmount,
-        insurance: allCashDetails.insurance,
-        tax: allCashDetails.tax,
-        netAmount: allCashDetails.netPay,
-        futureValue: allCashDetails.netPay // 현금은 그대로 (이자 고려 안함)
+        taxableIncome: opiAmount,
+        tax: opiMarginalTax,
+        netAmount: allCashNetAmount,
+        futureValue: allCashNetAmount
     };
 
     // Case 2: 주식 선택
     const stockResult = calculateOPIReward(params);
     const withStock = {
         grossAmount: opiAmount,
-        cashPortion: stockResult.netCashAmount,
-        stockPortion: stockResult.futureStockValue,
-        remainder: stockResult.remainder,
-        additionalBenefitValue: stockResult.benefitGain,
-        totalFutureValue: stockResult.totalReceived,
-        stockCount: stockResult.stockCount
+        additionalBenefit: stockResult.additionalBenefit,
+        taxableIncome: stockResult.opiTaxableIncome,
+        tax: stockResult.opiTaxAmount,
+        stockCount: stockResult.stockCount,
+        futureStockValue: stockResult.futureStockValue,
+        totalFutureValue: stockResult.totalReceived
     };
 
-    // 손익분기 주가 계산
-    // 주식 선택 시 15% 추가혜택이 있으므로, 주가가 약 13% 하락해도 손해 없음
+    // 손익분기 주가 계산 (평가차액 과세 반영으로 약 -12%~-14% 수준)
     const breakEvenPrice = baseStockPrice * (1 - CONFIG.ADDITIONAL_BENEFIT_RATE / (1 + CONFIG.ADDITIONAL_BENEFIT_RATE));
     const breakEvenChange = ((breakEvenPrice / baseStockPrice) - 1) * 100;
 

@@ -252,11 +252,11 @@ const UI = {
                     ${isOptimal ? '<span class="text-indigo-600 dark:text-indigo-400 mr-1">★</span>' : ''}
                     ${s.stockRatio}%
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap text-right">${Calculator.formatCurrencyShort(s.stockRewardAmount)}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-right text-green-600 dark:text-green-400">+${Calculator.formatCurrencyShort(s.additionalBenefit)}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-right">${s.stockCount.toLocaleString()}주</td>
-                <td class="px-4 py-3 whitespace-nowrap text-right">${Calculator.formatCurrencyShort(s.netCashAmount)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right text-green-600 dark:text-green-400">+${Calculator.formatCurrencyShort(s.additionalBenefit)}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-right">${Calculator.formatCurrencyShort(s.futureStockValue)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right">${Calculator.formatCurrencyShort(s.opiTaxableIncome)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right text-red-500">-${Calculator.formatCurrencyShort(s.opiTaxAmount)}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-right font-bold ${isOptimal ? 'text-indigo-600 dark:text-indigo-400' : ''}">${Calculator.formatCurrencyShort(s.totalReceived)}</td>
             `;
             tbody.appendChild(row);
@@ -304,15 +304,6 @@ const UI = {
     updateTaxComparison(comparison, params) {
         if (!this.elements.taxComparison) return;
 
-        const formatInsurance = (ins) => `
-            <div class="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                <div class="flex justify-between"><span>국민연금</span><span>${Calculator.formatCurrencyShort(ins.nationalPension)}</span></div>
-                <div class="flex justify-between"><span>건강보험</span><span>${Calculator.formatCurrencyShort(ins.healthInsurance)}</span></div>
-                <div class="flex justify-between"><span>장기요양</span><span>${Calculator.formatCurrencyShort(ins.longTermCare)}</span></div>
-                <div class="flex justify-between"><span>고용보험</span><span>${Calculator.formatCurrencyShort(ins.employmentInsurance)}</span></div>
-            </div>
-        `;
-
         this.elements.taxComparison.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- 100% 현금 수령 -->
@@ -320,28 +311,17 @@ const UI = {
                     <h4 class="font-bold text-lg mb-4 text-amber-700 dark:text-amber-400">100% 현금 수령</h4>
                     <div class="space-y-3">
                         <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">세전 금액</span>
+                            <span class="text-gray-600 dark:text-gray-400">OPI 세전 금액</span>
                             <span class="font-semibold">${Calculator.formatCurrency(comparison.allCash.grossAmount)}</span>
                         </div>
-                        <details class="group">
-                            <summary class="flex justify-between cursor-pointer list-none">
-                                <span class="text-gray-600 dark:text-gray-400">4대보험</span>
-                                <span class="text-red-500">-${Calculator.formatCurrencyShort(comparison.allCash.insurance.total)}</span>
-                            </summary>
-                            <div class="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                                ${formatInsurance(comparison.allCash.insurance)}
-                            </div>
-                        </details>
-                        <details class="group">
-                            <summary class="flex justify-between cursor-pointer list-none">
-                                <span class="text-gray-600 dark:text-gray-400">소득세+지방세</span>
-                                <span class="text-red-500">-${Calculator.formatCurrencyShort(comparison.allCash.tax.total)}</span>
-                            </summary>
-                            <div class="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
-                                <div class="flex justify-between"><span>소득세</span><span>${Calculator.formatCurrencyShort(comparison.allCash.tax.incomeTax)}</span></div>
-                                <div class="flex justify-between"><span>지방소득세</span><span>${Calculator.formatCurrencyShort(comparison.allCash.tax.localTax)}</span></div>
-                            </div>
-                        </details>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">과세 소득</span>
+                            <span>${Calculator.formatCurrency(comparison.allCash.taxableIncome)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">세금 (4대보험+소득세)</span>
+                            <span class="text-red-500">-${Calculator.formatCurrency(comparison.allCash.tax)}</span>
+                        </div>
                         <div class="border-t border-amber-300 dark:border-amber-700 pt-3 flex justify-between">
                             <span class="font-bold">세후 수령액</span>
                             <span class="font-bold text-xl text-amber-700 dark:text-amber-400">${Calculator.formatCurrency(comparison.allCash.netAmount)}</span>
@@ -354,27 +334,27 @@ const UI = {
                     <h4 class="font-bold text-lg mb-4 text-green-700 dark:text-green-400">주식 ${this.currentResult?.result.optimalRatio || 50}% 선택</h4>
                     <div class="space-y-3">
                         <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">현금 부분 (세후)</span>
-                            <span class="font-semibold">${Calculator.formatCurrency(comparison.withStock.cashPortion)}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">주식 가치 (1년 후)</span>
-                            <span class="font-semibold">${Calculator.formatCurrency(comparison.withStock.stockPortion)}</span>
-                        </div>
-                        <div class="flex justify-between">
                             <span class="text-gray-600 dark:text-gray-400">지급 주식수</span>
                             <span class="font-semibold">${comparison.withStock.stockCount.toLocaleString()}주</span>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">차액</span>
-                            <span>${Calculator.formatCurrency(comparison.withStock.remainder)}</span>
-                        </div>
                         <div class="flex justify-between text-green-600 dark:text-green-400">
-                            <span>추가혜택 가치</span>
-                            <span>+${Calculator.formatCurrencyShort(comparison.withStock.additionalBenefitValue)}</span>
+                            <span>15% 추가혜택</span>
+                            <span>+${Calculator.formatCurrencyShort(comparison.withStock.additionalBenefit)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">주식 가치 (1년 후)</span>
+                            <span>${Calculator.formatCurrency(comparison.withStock.futureStockValue)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">과세 소득</span>
+                            <span>${Calculator.formatCurrency(comparison.withStock.taxableIncome)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">세금 (4대보험+소득세)</span>
+                            <span class="text-red-500">-${Calculator.formatCurrency(comparison.withStock.tax)}</span>
                         </div>
                         <div class="border-t border-green-300 dark:border-green-700 pt-3 flex justify-between">
-                            <span class="font-bold">예상 총 가치</span>
+                            <span class="font-bold">세후 실수령액</span>
                             <span class="font-bold text-xl text-green-700 dark:text-green-400">${Calculator.formatCurrency(comparison.withStock.totalFutureValue)}</span>
                         </div>
                     </div>

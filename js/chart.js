@@ -97,10 +97,11 @@ const ChartManager = {
         }
 
         const labels = scenarios.map(s => `${s.stockRatio}%`);
-        const cashData = scenarios.map(s => s.netCashAmount);
+        // v2: 세전 구성요소 + 세금 차감 표시
+        const cashData = scenarios.map(s => s.cashAmountGross);
         const stockData = scenarios.map(s => s.futureStockValue);
-        const benefitData = scenarios.map(s => s.additionalBenefit * (s.futureStockValue / (s.stockCount * Calculator.CONFIG.STOCK_RATIO_OPTIONS[0] || s.currentStockValue || 1)));
         const remainderData = scenarios.map(s => s.remainder);
+        const taxData = scenarios.map(s => -s.opiTaxAmount);  // 음수로 표시
 
         // 최적 비율 인덱스 찾기
         const optimalIndex = scenarios.findIndex(s =>
@@ -118,7 +119,7 @@ const ChartManager = {
                 labels: labels,
                 datasets: [
                     {
-                        label: '현금 수령 (세후)',
+                        label: '현금 (세전)',
                         data: cashData,
                         backgroundColor: this.colors.chart.cash,
                         borderColor: this.colors.chart.cashBorder,
@@ -138,6 +139,14 @@ const ChartManager = {
                         data: remainderData,
                         backgroundColor: this.colors.chart.remainder,
                         borderColor: this.colors.chart.remainderBorder,
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: '세금',
+                        data: taxData,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: 'rgb(239, 68, 68)',
                         borderWidth: 1,
                         borderRadius: 4
                     }
